@@ -1,0 +1,221 @@
+#include <Arduino.h>
+#include <Wire.h>
+#include <Adafruit_GFX.h>
+#include <Adafruit_SSD1306.h>
+#include "driver/i2s.h"
+
+// ================= OLED DISPLAY =================
+#define SCREEN_WIDTH 128
+#define SCREEN_HEIGHT 64
+
+Adafruit_SSD1306 display(SCREEN_WIDTH, SCREEN_HEIGHT, &Wire, -1);
+
+// ================= ANALOG MIC =================
+#define MIC_PIN 34
+#define SOUND_THRESHOLD 1200
+
+// ================= I2S MIC =================
+#define I2S_SCK 26
+#define I2S_WS  27
+#define I2S_SD  33
+
+// ================= SPEAKER =================
+#define SPEAKER_PIN 25   // LM386 input
+
+// ----------- OLED EMOTION FUNCTIONS -----------
+
+// 😀 Happy
+void happyFace() {
+  display.clearDisplay();
+  display.fillCircle(40, 25, 5, SSD1306_WHITE);
+  display.fillCircle(90, 25, 5, SSD1306_WHITE);
+  display.drawLine(45, 45, 55, 50, SSD1306_WHITE);
+  display.drawLine(55, 50, 75, 50, SSD1306_WHITE);
+  display.drawLine(75, 50, 85, 45, SSD1306_WHITE);
+  display.display();
+}
+
+// 😢 Sad
+void sadFace() {
+  display.clearDisplay();
+  display.fillCircle(40, 25, 5, SSD1306_WHITE);
+  display.fillCircle(90, 25, 5, SSD1306_WHITE);
+  display.drawLine(45, 55, 55, 50, SSD1306_WHITE);
+  display.drawLine(55, 50, 75, 50, SSD1306_WHITE);
+  display.drawLine(75, 50, 85, 55, SSD1306_WHITE);
+  display.display();
+}
+
+// 😡 Angry
+void angryFace() {
+  display.clearDisplay();
+  display.drawLine(30, 15, 55, 25, SSD1306_WHITE);
+  display.drawLine(75, 25, 100, 15, SSD1306_WHITE);
+  display.fillCircle(40, 30, 5, SSD1306_WHITE);
+  display.fillCircle(90, 30, 5, SSD1306_WHITE);
+  display.drawLine(45, 55, 85, 55, SSD1306_WHITE);
+  display.display();
+}
+
+// 😐 Neutral
+void neutralFace() {
+  display.clearDisplay();
+  display.fillCircle(40, 25, 5, SSD1306_WHITE);
+  display.fillCircle(90, 25, 5, SSD1306_WHITE);
+  display.drawLine(45, 50, 85, 50, SSD1306_WHITE);
+  display.display();
+}
+
+// 😲 Surprised
+void surprisedFace() {
+  display.clearDisplay();
+  display.fillCircle(40, 25, 5, SSD1306_WHITE);
+  display.fillCircle(90, 25, 5, SSD1306_WHITE);
+  display.drawCircle(65, 50, 8, SSD1306_WHITE);
+  display.display();
+}
+
+// 😴 Sleepy
+void sleepyFace() {
+  display.clearDisplay();
+  display.drawLine(30, 25, 50, 25, SSD1306_WHITE);
+  display.drawLine(80, 25, 100, 25, SSD1306_WHITE);
+  display.drawLine(45, 55, 85, 55, SSD1306_WHITE);
+  display.display();
+}
+
+// ❤️ Love
+void loveFace() {
+  display.clearDisplay();
+  display.fillTriangle(35, 20, 40, 30, 45, 20, SSD1306_WHITE);
+  display.fillTriangle(85, 20, 90, 30, 95, 20, SSD1306_WHITE);
+  display.drawLine(45, 50, 55, 55, SSD1306_WHITE);
+  display.drawLine(55, 55, 65, 57, SSD1306_WHITE);
+  display.drawLine(65, 57, 75, 55, SSD1306_WHITE);
+  display.drawLine(75, 55, 85, 50, SSD1306_WHITE);
+  display.display();
+}
+
+// 🎤 Mic listening emoji
+void micEmoji() {
+  display.clearDisplay();
+  display.fillCircle(65, 20, 8, SSD1306_WHITE);
+  display.fillRect(60, 25, 10, 20, SSD1306_WHITE);
+  display.drawLine(55, 50, 75, 50, SSD1306_WHITE);
+  display.drawLine(65, 50, 65, 60, SSD1306_WHITE);
+  display.setTextSize(1);
+  display.setTextColor(SSD1306_WHITE);
+  display.setCursor(30, 2);
+  display.println("Listening...");
+  display.display();
+}
+
+// 🤖 Robot holding a mic only
+void talkingFace() {
+  display.clearDisplay();
+
+  // Robot eyes
+  display.fillCircle(40, 25, 5, SSD1306_WHITE);
+  display.fillCircle(90, 25, 5, SSD1306_WHITE);
+
+  // Microphone in front of robot
+  display.fillRect(63, 35, 6, 15, SSD1306_WHITE);   // mic handle
+  display.drawCircle(66, 33, 5, SSD1306_WHITE);     // mic top
+
+  // Hands holding mic
+  display.drawLine(55, 45, 63, 45, SSD1306_WHITE);  // left hand
+  display.drawLine(80, 45, 69, 45, SSD1306_WHITE);  // right hand
+
+  // Text above
+  display.setTextSize(1);
+  display.setCursor(28, 0);
+  display.println("Robot Speaking");
+
+  display.display();
+}
+
+// ================= I2S MIC SETUP =================
+void setupI2SMic() {
+  i2s_config_t i2s_config = {
+    .mode = (i2s_mode_t)(I2S_MODE_MASTER | I2S_MODE_RX),
+    .sample_rate = 16000,
+    .bits_per_sample = I2S_BITS_PER_SAMPLE_32BIT,
+    .channel_format = I2S_CHANNEL_FMT_ONLY_LEFT,
+    .communication_format = I2S_COMM_FORMAT_I2S,
+    .intr_alloc_flags = ESP_INTR_FLAG_LEVEL1,
+    .dma_buf_count = 4,
+    .dma_buf_len = 512
+  };
+
+  i2s_pin_config_t pin_config = {
+    .bck_io_num = I2S_SCK,
+    .ws_io_num = I2S_WS,
+    .data_out_num = -1,
+    .data_in_num = I2S_SD
+  };
+
+  i2s_driver_install(I2S_NUM_0, &i2s_config, 0, NULL);
+  i2s_set_pin(I2S_NUM_0, &pin_config);
+}
+
+// ================= SPEAK ROBOT =================
+void speakRobot(String text) {
+
+  // Show robot holding mic
+  talkingFace();
+
+  ledcAttachPin(SPEAKER_PIN, 0);
+
+  for (int i = 0; i < text.length(); i++) {
+    int freq = 400 + (text[i] % 20) * 30;
+    ledcSetup(0, freq, 8);
+    ledcWrite(0, 128);
+    delay(80);
+    ledcWrite(0, 0);
+    delay(30);
+  }
+}
+
+// ================= SETUP =================
+void setup() {
+  Serial.begin(115200);
+
+  Wire.begin(21, 22);   // OLED pins unchanged
+
+  if (!display.begin(SSD1306_SWITCHCAPVCC, 0x3C)) {
+    Serial.println("OLED not found");
+    while (true);
+  }
+
+  display.clearDisplay();
+  display.display();
+
+  setupI2SMic();
+}
+
+// ================= MAIN LOOP =================
+void loop() {
+
+  // ---- MIC SOUND EMOJI ----
+  int sound = analogRead(MIC_PIN);
+  Serial.println(sound);
+
+  if (sound > SOUND_THRESHOLD) {
+    micEmoji();
+    delay(200);
+  } else {
+    happyFace(); delay(500);
+    sadFace(); delay(500);
+    angryFace(); delay(500);
+    neutralFace(); delay(500);
+    surprisedFace(); delay(500);
+    sleepyFace(); delay(500);
+    loveFace(); delay(500);
+  }
+
+  // ---- TEXT TO ROBOT SPEECH ----
+  if (Serial.available()) {
+    String msg = Serial.readStringUntil('\n');
+    speakRobot(msg);
+  }
+}
