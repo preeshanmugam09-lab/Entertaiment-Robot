@@ -7,7 +7,7 @@ import os
 # =====================
 # GEMINI CONFIG
 # =====================
-os.environ["GOOGLE_API_KEY"] = "AIzaSyDljjdaAWvlBHoXjafJBybTSAfXjGG603A"
+os.environ["GOOGLE_API_KEY"] = "GOOGLE_API_KEY"
 genai.configure(api_key=os.environ["GOOGLE_API_KEY"])
 model = genai.GenerativeModel("gemini-flash-latest")
 
@@ -52,5 +52,6 @@ while True:
 
     reply = ask_gemini(text)
     print("Gemini:", reply)
+
 
     esp.write((reply + "\n").encode())
